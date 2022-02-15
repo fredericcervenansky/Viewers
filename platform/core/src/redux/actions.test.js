@@ -11,8 +11,6 @@ describe('actions', () => {
       'setLayout',
       'clearViewportSpecificData',
       'setActiveViewportSpecificData',
-      'setStudyLoadingProgress',
-      'clearStudyLoadingProgress',
       'setUserPreferences',
       'setExtensionData',
       'setTimepoints',
@@ -28,21 +26,21 @@ describe('actions', () => {
 
   describe('viewport action creators', () => {
     it('should create an action to set the viewport specific data', () => {
-      const data = {
-        displaySetInstanceUid: 'ef859a23-4631-93ab-d26b-7940a822c699',
-        seriesDate: '20151026',
-        seriesTime: '082611.370000',
-        seriesInstanceUid:
+      const viewportSpecificData = {
+        displaySetInstanceUID: 'ef859a23-4631-93ab-d26b-7940a822c699',
+        SeriesDate: '20151026',
+        SeriesTime: '082611.370000',
+        SeriesInstanceUID:
           '1.3.6.1.4.1.25403.345050719074.3824.20170126085406.5',
-        seriesNumber: 2,
-        seriesDescription: 'Chest 3x3 Soft',
+        SeriesNumber: 2,
+        SeriesDescription: 'Chest 3x3 Soft',
         numImageFrames: 126,
-        modality: 'CT',
+        Modality: 'CT',
         isMultiFrame: false,
-        instanceNumber: 1,
-        studyInstanceUid:
+        InstanceNumber: 1,
+        StudyInstanceUID:
           '1.3.6.1.4.1.25403.345050719074.3824.20170126085406.1',
-        sopClassUids: ['1.2.840.10008.5.1.4.1.1.2'],
+        sopClassUIDs: ['1.2.840.10008.5.1.4.1.1.2'],
         plugin: 'cornerstone',
         viewport: {
           zoomScale: null,
@@ -65,12 +63,12 @@ describe('actions', () => {
 
       const expectedAction = {
         type: types.SET_ACTIVE_SPECIFIC_DATA,
-        data,
+        viewportSpecificData,
       };
 
-      expect(actions.setActiveViewportSpecificData(data)).toEqual(
-        expectedAction
-      );
+      expect(
+        actions.setActiveViewportSpecificData(viewportSpecificData)
+      ).toEqual(expectedAction);
     });
 
     it('should create an action to clear clearViewportSpecificData', () => {
@@ -94,19 +92,20 @@ describe('actions', () => {
     });
 
     it('should create an action to set the viewport layout', () => {
-      const layout = {
-        viewports: [
-          {
-            height: '100%',
-            width: '100%',
-          },
-        ],
-      };
+      const numRows = 1;
+      const numColumns = 2;
+      const viewports = [{ plugin: 'vtk' }, { plugin: 'vtk' }];
+
       const expectedAction = {
         type: types.SET_VIEWPORT_LAYOUT,
-        layout,
+        numRows,
+        numColumns,
+        viewports,
       };
-      expect(actions.setLayout(layout)).toEqual(expectedAction);
+
+      expect(actions.setLayout({ numRows, numColumns, viewports })).toEqual(
+        expectedAction
+      );
     });
   });
 });

@@ -2,21 +2,25 @@
 # https://github.com/apps/stale
 #
 # Number of days of inactivity before an issue becomes stale
-daysUntilStale: 21
+daysUntilStale: 180
 # Number of days of inactivity before a stale issue is closed
-daysUntilClose: 7
+daysUntilClose: 9000
 # Issues with these labels will never be considered stale
 exemptLabels:
-  - 'Story 🙌'
-  - 'Bug: Verified 🐛'
-  - 'Task: CI/Tooling 🤖'
+  - 'Story :raised_hands:'
+  - 'Bug: Verified :bug:'
+  - 'Task: CI/Tooling :robot:'
   - 'Task: Docs 📖'
   - 'Task: Docs :book:'
-  - 'Task: Refactor 🛠'
-  - 'Task: Tests 🔬'
+  - 'Task: Refactor :hammer_and_wrench:'
+  - 'Task: Tests :microscope:'
   - 'PR: Awaiting Review 👀'
-  - 'Triage 🏳️'
+  - 'Triage :white_flag:'
+  - 'Extension: Discussion'
   - 'Announcement 🎉'
+  - 'IDC:priority'
+  - 'IDC:candidate'
+  - 'IDC:collaboration'
 # Label to use when marking an issue as stale
 staleLabel: 'Stale :baguette_bread:'
 # Comment to post when marking an issue as stale. Set to `false` to disable

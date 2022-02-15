@@ -67,6 +67,58 @@ Our Viewport wraps [cornerstonejs/react-cornerstone-viewport][react-viewport]
 and is connected the redux store. This module is the most prone to change as we
 hammer out our Viewport interface.
 
+## Tool Configuration
+
+Tools can be configured through extension configuration using the tools key:
+
+```js
+  ...
+  cornerstoneExtensionConfig: {
+    tools: {
+      ArrowAnnotate: {
+        configuration: {
+          getTextCallback: (callback, eventDetails) => callback(prompt('Enter your custom annotation')),
+        },
+      },
+    },
+  },
+  ...
+```
+
+## Stack prefetch configuration
+
+Stack prefetch can be configured through extension configuration using the
+stackPrefetch key:
+
+```js
+  ...
+  cornerstoneExtensionConfig: {
+    stackPrefetch: {
+      enabled: true,
+      maxImagesToPrefetch: Infinity,
+      preserveExistingPool: false,
+      maxSimultaneousRequests: 20,
+    },
+  },
+  ...
+```
+
+## Annotate Tools Configuration
+
+_We currently support one property for annotation tools._
+
+### Hide handles
+
+This extension configuration allows you to toggle on/off handle rendering for
+all annotate tools:
+
+```js
+  ...
+  cornerstoneExtensionConfig: {
+    hideHandles: true,
+  },
+  ...
+
 ## Resources
 
 ### Repositories
@@ -87,3 +139,4 @@ hammer out our Viewport interface.
 [cornerstone-tools]: https://github.com/cornerstonejs/cornerstoneTools
 [cornerstone]: https://github.com/cornerstonejs/cornerstone
 <!-- prettier-ignore-end -->
+```

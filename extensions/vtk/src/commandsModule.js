@@ -1,391 +1,597 @@
+import throttle from 'lodash.throttle';
 import {
-  vtkInteractorStyleMPRCrosshairs,
   vtkInteractorStyleMPRWindowLevel,
-  vtkInteractorStyleMPRSlice,
-  vtkSVGCrosshairsWidget,
-  vtkSVGWidgetManager,
+  vtkInteractorStyleRotatableMPRCrosshairs,
+  vtkSVGRotatableCrosshairsWidget,
+  vtkInteractorStyleMPRRotate,
 } from 'react-vtkjs-viewport';
-
+import { getImageData } from 'react-vtkjs-viewport';
+import { vec3 } from 'gl-matrix';
 import setMPRLayout from './utils/setMPRLayout.js';
 import setViewportToVTK from './utils/setViewportToVTK.js';
-import vtkCoordinate from 'vtk.js/Sources/Rendering/Core/Coordinate';
-import vtkMath from 'vtk.js/Sources/Common/Core/Math';
-import vtkMatrixBuilder from 'vtk.js/Sources/Common/Core/MatrixBuilder';
 import Constants from 'vtk.js/Sources/Rendering/Core/VolumeMapper/Constants.js';
+import OHIFVTKViewport from './OHIFVTKViewport';
 
 const { BlendMode } = Constants;
 
-// TODO: Put this somewhere else
-let apis = {};
-let currentSlabThickness = 0.1;
+const commandsModule = ({ commandsManager, servicesManager }) => {
+  const { UINotificationService, LoggerService } = servicesManager.services;
 
-function getCrosshairCallbackForIndex(index) {
-  return ({ worldPos }) => {
-    // Set camera focal point to world coordinate for linked views
-    apis.forEach((api, viewportIndex) => {
-      if (viewportIndex !== index) {
-        // We are basically doing the same as getSlice but with the world coordinate
-        // that we want to jump to instead of the camera focal point.
-        // I would rather do the camera adjustment directly but I keep
-        // doing it wrong and so this is good enough for now.
-        const renderWindow = api.genericRenderWindow.getRenderWindow();
+  // TODO: Put this somewhere else
+  let apis = {};
+  let defaultVOI;
 
-        const istyle = renderWindow.getInteractor().getInteractorStyle();
-        const sliceNormal = istyle.getSliceNormal();
-        const transform = vtkMatrixBuilder
-          .buildFromDegree()
-          .identity()
-          .rotateFromDirections(sliceNormal, [1, 0, 0]);
+  async function _getActiveViewportVTKApi(viewports) {
+    const {
+      numRows,
+      numColumns,
+      layout,
+      viewportSpecificData,
+      activeViewportIndex,
+    } = viewports;
 
-        const mutatedWorldPos = worldPos.slice();
-        transform.apply(mutatedWorldPos);
-        const slice = mutatedWorldPos[0];
-
-        istyle.setSlice(slice);
-
-        renderWindow.render();
+    const currentData = layout.viewports[activeViewportIndex];
+    if (currentData && currentData.plugin === 'vtk') {
+      // TODO: I was storing/pulling this from Redux but ran into weird issues
+      if (apis[activeViewportIndex]) {
+        return apis[activeViewportIndex];
       }
-
-      const renderer = api.genericRenderWindow.getRenderer();
-      const wPos = vtkCoordinate.newInstance();
-      wPos.setCoordinateSystemToWorld();
-      wPos.setValue(worldPos);
-
-      const displayPosition = wPos.getComputedDisplayValue(renderer);
-      const { svgWidgetManager } = api;
-      api.svgWidgets.crosshairsWidget.setPoint(
-        displayPosition[0],
-        displayPosition[1]
-      );
-      svgWidgetManager.render();
-    });
-  };
-}
-
-async function _getActiveViewportVTKApi(viewports) {
-  const { layout, viewportSpecificData, activeViewportIndex } = viewports;
-
-  const currentData = layout.viewports[activeViewportIndex];
-  if (currentData && currentData.plugin === 'vtk') {
-    // TODO: I was storing/pulling this from Redux but ran into weird issues
-    if (apis[activeViewportIndex]) {
-      return apis[activeViewportIndex];
-    }
-  }
-
-  const displaySet = viewportSpecificData[activeViewportIndex];
-
-  let api;
-  if (!api) {
-    try {
-      api = await setViewportToVTK(
-        displaySet,
-        activeViewportIndex,
-        layout,
-        viewportSpecificData
-      );
-    } catch (error) {
-      throw new Error(error);
-    }
-  }
-
-  return api;
-}
-
-function _setView(api, sliceNormal, viewUp) {
-  const renderWindow = api.genericRenderWindow.getRenderWindow();
-  const renderer = api.genericRenderWindow.getRenderer();
-  const camera = renderer.getActiveCamera();
-  const istyle = renderWindow.getInteractor().getInteractorStyle();
-  istyle.setSliceNormal(...sliceNormal);
-  camera.setViewUp(...viewUp);
-
-  renderWindow.render();
-}
-
-function switchMPRInteractors(api, istyle) {
-  const renderWindow = api.genericRenderWindow.getRenderWindow();
-  const renderer = api.genericRenderWindow.getRenderer();
-  const camera = renderer.getActiveCamera();
-  const currentIStyle = renderWindow.getInteractor().getInteractorStyle();
-
-  let currentNormal;
-  if (currentIStyle.getSliceNormal && istyle.getSliceNormal) {
-    currentNormal = currentIStyle.getSliceNormal();
-  }
-
-  let currentSlabThickness;
-  if (currentIStyle.getSlabThickness && istyle.getSlabThickness) {
-    currentSlabThickness = currentIStyle.getSlabThickness();
-  }
-
-  renderWindow.getInteractor().setInteractorStyle(istyle);
-
-  // TODO: Not sure why this is required the second time this function is called
-  istyle.setInteractor(renderWindow.getInteractor());
-
-  if (istyle.getVolumeMapper() !== api.volumes[0]) {
-    if (currentNormal) {
-      istyle.setSliceNormal(currentNormal);
     }
 
-    if (currentSlabThickness) {
-      istyle.setSlabThickness(currentSlabThickness);
-    }
-
-    istyle.setVolumeMapper(api.volumes[0]);
-  }
-}
-
-const actions = {
-  axial: async ({ viewports }) => {
-    const api = await _getActiveViewportVTKApi(viewports);
-
-    apis[viewports.activeViewportIndex] = api;
-
-    _setView(api, [0, 0, 1], [0, -1, 0]);
-  },
-  sagittal: async ({ viewports }) => {
-    const api = await _getActiveViewportVTKApi(viewports);
-
-    apis[viewports.activeViewportIndex] = api;
-
-    _setView(api, [1, 0, 0], [0, 0, 1]);
-  },
-  coronal: async ({ viewports }) => {
-    const api = await _getActiveViewportVTKApi(viewports);
-
-    apis[viewports.activeViewportIndex] = api;
-
-    _setView(api, [0, 1, 0], [0, 0, 1]);
-  },
-  enableRotateTool: () => {
-    apis.forEach(api => {
-      const istyle = vtkInteractorStyleMPRSlice.newInstance();
-
-      switchMPRInteractors(api, istyle);
-    });
-  },
-  enableCrosshairsTool: () => {
-    apis.forEach((api, index) => {
-      const istyle = vtkInteractorStyleMPRCrosshairs.newInstance();
-
-      switchMPRInteractors(api, istyle);
-
-      istyle.setCallback(getCrosshairCallbackForIndex(index));
-    });
-  },
-  enableLevelTool: () => {
-    apis.forEach(api => {
-      const istyle = vtkInteractorStyleMPRWindowLevel.newInstance();
-
-      switchMPRInteractors(api, istyle);
-    });
-  },
-  setSlabThickness: slabThickness => {
-    currentSlabThickness = slabThickness;
-
-    apis.forEach(api => {
-      const renderWindow = api.genericRenderWindow.getRenderWindow();
-      const istyle = renderWindow.getInteractor().getInteractorStyle();
-
-      if (istyle.setSlabThickness) {
-        istyle.setSlabThickness(currentSlabThickness);
-
-        // TODO: Do this inside the interactors in a setSlabThickness function instead
-        const renderer = api.genericRenderWindow.getRenderer();
-        const camera = renderer.getActiveCamera();
-        const dist = camera.getDistance();
-        const near = dist - currentSlabThickness / 2;
-        const far = dist + currentSlabThickness / 2;
-
-        camera.setClippingRange(near, far);
+    const displaySet = viewportSpecificData[activeViewportIndex];
+    let api;
+    if (!api) {
+      try {
+        api = await setViewportToVTK(
+          displaySet,
+          activeViewportIndex,
+          numRows,
+          numColumns,
+          layout,
+          viewportSpecificData
+        );
+      } catch (error) {
+        throw new Error(error);
       }
-
-      renderWindow.render();
-    });
-  },
-  changeSlabThickness: ({ change }) => {
-    currentSlabThickness += change;
-    currentSlabThickness = Math.max(currentSlabThickness, 0.1);
-
-    apis.forEach(api => {
-      const renderWindow = api.genericRenderWindow.getRenderWindow();
-      const istyle = renderWindow.getInteractor().getInteractorStyle();
-
-      if (istyle.setSlabThickness) {
-        istyle.setSlabThickness(currentSlabThickness);
-      }
-
-      renderWindow.render();
-    });
-  },
-  setBlendMode: ({ blendMode }) => {
-    apis.forEach(api => {
-      const renderWindow = api.genericRenderWindow.getRenderWindow();
-      const istyle = renderWindow.getInteractor().getInteractorStyle();
-
-      api.volumes[0].getMapper().setBlendMode(blendMode);
-
-      renderWindow.render();
-    });
-  },
-  mpr2d: async ({ viewports }) => {
-    const displaySet =
-      viewports.viewportSpecificData[viewports.activeViewportIndex];
-
-    let apiByViewport;
-    try {
-      apiByViewport = await setMPRLayout(displaySet);
-    } catch (error) {
-      throw new Error(error);
     }
 
-    apis = apiByViewport;
+    return api;
+  }
 
-    /*const rgbTransferFunction = apiByViewport[0].volumes[0]
+  function _setView(api, sliceNormal, viewUp) {
+    const renderWindow = api.genericRenderWindow.getRenderWindow();
+    const istyle = renderWindow.getInteractor().getInteractorStyle();
+    istyle.setSliceNormal(...sliceNormal);
+    istyle.setViewUp(...viewUp);
+
+    renderWindow.render();
+  }
+
+  function getVOIFromCornerstoneViewport() {
+    const dom = commandsManager.runCommand('getActiveViewportEnabledElement');
+    const cornerstoneElement = cornerstone.getEnabledElement(dom);
+
+    if (cornerstoneElement) {
+      const imageId = cornerstoneElement.image.imageId;
+
+      const Modality = cornerstone.metaData.get('Modality', imageId);
+
+      if (Modality !== 'PT') {
+        const { windowWidth, windowCenter } = cornerstoneElement.viewport.voi;
+
+        return {
+          windowWidth,
+          windowCenter,
+        };
+      }
+    }
+  }
+
+  function setVOI(voi) {
+    const { windowWidth, windowCenter } = voi;
+    const lower = windowCenter - windowWidth / 2.0;
+    const upper = windowCenter + windowWidth / 2.0;
+
+    const rgbTransferFunction = apis[0].volumes[0]
       .getProperty()
       .getRGBTransferFunction(0);
-    rgbTransferFunction.onModified(() => {
-      apiByViewport.forEach(a => {
-        const renderWindow = a.genericRenderWindow.getRenderWindow();
+
+    rgbTransferFunction.setRange(lower, upper);
+
+    apis.forEach(api => {
+      api.updateVOI(windowWidth, windowCenter);
+    });
+  }
+
+  const _convertModelToWorldSpace = (position, vtkImageData) => {
+    const indexToWorld = vtkImageData.getIndexToWorld();
+    const pos = vec3.create();
+
+    position[0] += 0.5; /* Move to the centre of the voxel. */
+    position[1] += 0.5; /* Move to the centre of the voxel. */
+    position[2] += 0.5; /* Move to the centre of the voxel. */
+
+    vec3.set(pos, position[0], position[1], position[2]);
+    vec3.transformMat4(pos, pos, indexToWorld);
+
+    return pos;
+  };
+
+  const actions = {
+    getVtkApis: ({ index }) => {
+      return apis[index];
+    },
+    resetMPRView() {
+      // Reset orientation
+      apis.forEach(api => api.resetOrientation());
+
+      // Reset VOI
+      if (defaultVOI) setVOI(defaultVOI);
+
+      // Reset the crosshairs
+      apis[0].svgWidgets.rotatableCrosshairsWidget.resetCrosshairs(apis, 0);
+    },
+    axial: async ({ viewports }) => {
+      const api = await _getActiveViewportVTKApi(viewports);
+
+      apis[viewports.activeViewportIndex] = api;
+
+      _setView(api, [0, 0, 1], [0, -1, 0]);
+    },
+    sagittal: async ({ viewports }) => {
+      const api = await _getActiveViewportVTKApi(viewports);
+
+      apis[viewports.activeViewportIndex] = api;
+
+      _setView(api, [1, 0, 0], [0, 0, 1]);
+    },
+    coronal: async ({ viewports }) => {
+      const api = await _getActiveViewportVTKApi(viewports);
+
+      apis[viewports.activeViewportIndex] = api;
+
+      _setView(api, [0, 1, 0], [0, 0, 1]);
+    },
+    requestNewSegmentation: async ({ viewports }) => {
+      const allViewports = Object.values(viewports.viewportSpecificData);
+      const promises = allViewports.map(async (viewport, viewportIndex) => {
+        let api = apis[viewportIndex];
+
+        if (!api) {
+          api = await _getActiveViewportVTKApi(viewports);
+          apis[viewportIndex] = api;
+        }
+
+        api.requestNewSegmentation();
+        api.updateImage();
+      });
+      await Promise.all(promises);
+    },
+    jumpToSlice: async ({
+      viewports,
+      studies,
+      StudyInstanceUID,
+      displaySetInstanceUID,
+      SOPClassUID,
+      SOPInstanceUID,
+      segmentNumber,
+      frameIndex,
+      frame,
+      done = () => {},
+    }) => {
+      let api = apis[viewports.activeViewportIndex];
+
+      if (!api) {
+        api = await _getActiveViewportVTKApi(viewports);
+        apis[viewports.activeViewportIndex] = api;
+      }
+
+      const stack = OHIFVTKViewport.getCornerstoneStack(
+        studies,
+        StudyInstanceUID,
+        displaySetInstanceUID,
+        SOPClassUID,
+        SOPInstanceUID,
+        frameIndex
+      );
+
+      const imageDataObject = getImageData(
+        stack.imageIds,
+        displaySetInstanceUID
+      );
+
+      let pixelIndex = 0;
+      let x = 0;
+      let y = 0;
+      let count = 0;
+
+      const rows = imageDataObject.dimensions[1];
+      const cols = imageDataObject.dimensions[0];
+
+      for (let j = 0; j < rows; j++) {
+        for (let i = 0; i < cols; i++) {
+          // [i, j] =
+          const pixel = frame.pixelData[pixelIndex];
+          if (pixel === segmentNumber) {
+            x += i;
+            y += j;
+            count++;
+          }
+          pixelIndex++;
+        }
+      }
+      x /= count;
+      y /= count;
+
+      const position = [x, y, frameIndex];
+      const worldPos = _convertModelToWorldSpace(
+        position,
+        imageDataObject.vtkImageData
+      );
+
+      api.svgWidgets.rotatableCrosshairsWidget.moveCrosshairs(worldPos, apis);
+      done();
+    },
+    setSegmentationConfiguration: async ({
+      viewports,
+      globalOpacity,
+      visible,
+      renderOutline,
+      outlineThickness,
+    }) => {
+      const allViewports = Object.values(viewports.viewportSpecificData);
+      const promises = allViewports.map(async (viewport, viewportIndex) => {
+        let api = apis[viewportIndex];
+
+        if (!api) {
+          api = await _getActiveViewportVTKApi(viewports);
+          apis[viewportIndex] = api;
+        }
+
+        api.setGlobalOpacity(globalOpacity);
+        api.setVisibility(visible);
+        api.setOutlineThickness(outlineThickness);
+        api.setOutlineRendering(renderOutline);
+        api.updateImage();
+      });
+      await Promise.all(promises);
+    },
+    setSegmentConfiguration: async ({ viewports, visible, segmentNumber }) => {
+      const allViewports = Object.values(viewports.viewportSpecificData);
+      const promises = allViewports.map(async (viewport, viewportIndex) => {
+        let api = apis[viewportIndex];
+
+        if (!api) {
+          api = await _getActiveViewportVTKApi(viewports);
+          apis[viewportIndex] = api;
+        }
+
+        api.setSegmentVisibility(segmentNumber, visible);
+        api.updateImage();
+      });
+      await Promise.all(promises);
+    },
+    enableRotateTool: () => {
+      apis.forEach((api, apiIndex) => {
+        const istyle = vtkInteractorStyleMPRRotate.newInstance();
+
+        api.setInteractorStyle({
+          istyle,
+          configuration: { apis, apiIndex, uid: api.uid },
+        });
+      });
+    },
+    enableCrosshairsTool: () => {
+      apis.forEach((api, apiIndex) => {
+        const istyle = vtkInteractorStyleRotatableMPRCrosshairs.newInstance();
+
+        api.setInteractorStyle({
+          istyle,
+          configuration: {
+            apis,
+            apiIndex,
+            uid: api.uid,
+          },
+        });
+      });
+
+      const rotatableCrosshairsWidget =
+        apis[0].svgWidgets.rotatableCrosshairsWidget;
+
+      const referenceLines = rotatableCrosshairsWidget.getReferenceLines();
+
+      // Initilise crosshairs if not initialised.
+      if (!referenceLines) {
+        rotatableCrosshairsWidget.resetCrosshairs(apis, 0);
+      }
+    },
+    enableLevelTool: () => {
+      function updateVOI(apis, windowWidth, windowCenter) {
+        apis.forEach(api => {
+          api.updateVOI(windowWidth, windowCenter);
+        });
+      }
+
+      const throttledUpdateVOIs = throttle(updateVOI, 16, { trailing: true }); // ~ 60 fps
+
+      const callbacks = {
+        setOnLevelsChanged: ({ windowCenter, windowWidth }) => {
+          apis.forEach(api => {
+            const renderWindow = api.genericRenderWindow.getRenderWindow();
+
+            renderWindow.render();
+          });
+
+          throttledUpdateVOIs(apis, windowWidth, windowCenter);
+        },
+      };
+
+      apis.forEach((api, apiIndex) => {
+        const istyle = vtkInteractorStyleMPRWindowLevel.newInstance();
+
+        api.setInteractorStyle({
+          istyle,
+          callbacks,
+          configuration: { apis, apiIndex, uid: api.uid },
+        });
+      });
+    },
+    setSlabThickness: ({ slabThickness }) => {
+      apis.forEach(api => {
+        api.setSlabThickness(slabThickness);
+      });
+    },
+    changeSlabThickness: ({ change }) => {
+      apis.forEach(api => {
+        const slabThickness = Math.max(api.getSlabThickness() + change, 0.1);
+
+        api.setSlabThickness(slabThickness);
+      });
+    },
+    setBlendModeToComposite: () => {
+      apis.forEach(api => {
+        const renderWindow = api.genericRenderWindow.getRenderWindow();
+        const istyle = renderWindow.getInteractor().getInteractorStyle();
+
+        const slabThickness = api.getSlabThickness();
+
+        const mapper = api.volumes[0].getMapper();
+        if (mapper.setBlendModeToComposite) {
+          mapper.setBlendModeToComposite();
+        }
+
+        if (istyle.setSlabThickness) {
+          istyle.setSlabThickness(slabThickness);
+        }
+        renderWindow.render();
+      });
+    },
+    setBlendModeToMaximumIntensity: () => {
+      apis.forEach(api => {
+        const renderWindow = api.genericRenderWindow.getRenderWindow();
+        const mapper = api.volumes[0].getMapper();
+        if (mapper.setBlendModeToMaximumIntensity) {
+          mapper.setBlendModeToMaximumIntensity();
+        }
+        renderWindow.render();
+      });
+    },
+    setBlendMode: ({ blendMode }) => {
+      apis.forEach(api => {
+        const renderWindow = api.genericRenderWindow.getRenderWindow();
+
+        api.volumes[0].getMapper().setBlendMode(blendMode);
 
         renderWindow.render();
       });
-    });*/
+    },
+    mpr2d: async ({ viewports }) => {
+      // TODO push a lot of this backdoor logic lower down to the library level.
+      const displaySet =
+        viewports.viewportSpecificData[viewports.activeViewportIndex];
 
-    apiByViewport.forEach((api, index) => {
-      const renderWindow = api.genericRenderWindow.getRenderWindow();
-      const renderer = api.genericRenderWindow.getRenderer();
-      const camera = renderer.getActiveCamera();
+      // Get current VOI if cornerstone viewport.
+      const cornerstoneVOI = getVOIFromCornerstoneViewport();
+      defaultVOI = cornerstoneVOI;
 
-      const istyle = vtkInteractorStyleMPRCrosshairs.newInstance();
-      renderWindow.getInteractor().setInteractorStyle(istyle);
-
-      istyle.setVolumeMapper(api.volumes[0]);
-      istyle.setCallback(getCrosshairCallbackForIndex(index));
-
-      const svgWidgetManager = vtkSVGWidgetManager.newInstance();
-      svgWidgetManager.setRenderer(renderer);
-      svgWidgetManager.setScale(1);
-
-      const crosshairsWidget = vtkSVGCrosshairsWidget.newInstance();
-
-      svgWidgetManager.addWidget(crosshairsWidget);
-      svgWidgetManager.render();
-
-      api.svgWidgetManager = svgWidgetManager;
-      api.svgWidgets = {
-        crosshairsWidget,
-      };
-
-      switch (index) {
-        default:
-        case 0:
+      const viewportProps = [
+        {
           //Axial
-          istyle.setSliceNormal(0, 0, 1);
-          camera.setViewUp(0, -1, 0);
-
-          break;
-        case 1:
-          // sagittal
-          istyle.setSliceNormal(1, 0, 0);
-          camera.setViewUp(0, 0, 1);
-          break;
-        case 2:
+          orientation: {
+            sliceNormal: [0, 0, 1],
+            viewUp: [0, -1, 0],
+          },
+        },
+        {
+          // Sagittal
+          orientation: {
+            sliceNormal: [1, 0, 0],
+            viewUp: [0, 0, 1],
+          },
+        },
+        {
           // Coronal
-          istyle.setSliceNormal(0, 1, 0);
-          camera.setViewUp(0, 0, 1);
-          break;
+          orientation: {
+            sliceNormal: [0, 1, 0],
+            viewUp: [0, 0, 1],
+          },
+        },
+      ];
+
+      try {
+        apis = await setMPRLayout(displaySet, viewportProps, 1, 3);
+      } catch (error) {
+        throw new Error(error);
       }
 
-      renderWindow.render();
-    });
-  },
-};
+      if (cornerstoneVOI) {
+        setVOI(cornerstoneVOI);
+      }
 
-window.vtkActions = actions;
+      // Add widgets and set default interactorStyle of each viewport.
+      apis.forEach((api, apiIndex) => {
+        api.addSVGWidget(
+          vtkSVGRotatableCrosshairsWidget.newInstance(),
+          'rotatableCrosshairsWidget'
+        );
 
-const definitions = {
-  axial: {
-    commandFn: actions.axial,
-    storeContexts: ['viewports'],
-    options: {},
-  },
-  coronal: {
-    commandFn: actions.coronal,
-    storeContexts: ['viewports'],
-    options: {},
-  },
-  sagittal: {
-    commandFn: actions.sagittal,
-    storeContexts: ['viewports'],
-    options: {},
-  },
-  enableRotateTool: {
-    commandFn: actions.enableRotateTool,
-    storeContexts: [],
-    options: {},
-  },
-  enableCrosshairsTool: {
-    commandFn: actions.enableCrosshairsTool,
-    storeContexts: [],
-    options: {},
-  },
-  enableLevelTool: {
-    commandFn: actions.enableLevelTool,
-    storeContexts: [],
-    options: {},
-  },
-  setBlendModeToComposite: {
-    commandFn: actions.setBlendMode,
-    storeContexts: [],
-    options: { blendMode: BlendMode.COMPOSITE_BLEND },
-  },
-  setBlendModeToMaximumIntensity: {
-    commandFn: actions.setBlendMode,
-    storeContexts: [],
-    options: { blendMode: BlendMode.MAXIMUM_INTENSITY_BLEND },
-  },
-  setBlendModeToMinimumIntensity: {
-    commandFn: actions.setBlendMode,
-    storeContexts: [],
-    options: { blendMode: BlendMode.MINIMUM_INTENSITY_BLEND },
-  },
-  setBlendModeToAverageIntensity: {
-    commandFn: actions.setBlendMode,
-    storeContexts: [],
-    options: { blendMode: BlendMode.AVERAGE_INTENSITY_BLEND },
-  },
-  setSlabThickness: {
-    // TODO: How do we pass in a function argument?
-    commandFn: actions.setSlabThickness,
-    storeContexts: [],
-    options: {},
-  },
-  increaseSlabThickness: {
-    commandFn: actions.changeSlabThickness,
-    storeContexts: [],
-    options: {
-      change: 3,
+        const uid = api.uid;
+        const istyle = vtkInteractorStyleRotatableMPRCrosshairs.newInstance();
+
+        api.setInteractorStyle({
+          istyle,
+          configuration: { apis, apiIndex, uid },
+        });
+
+        api.svgWidgets.rotatableCrosshairsWidget.setApiIndex(apiIndex);
+        api.svgWidgets.rotatableCrosshairsWidget.setApis(apis);
+      });
+
+      const firstApi = apis[0];
+
+      // Initialise crosshairs
+      apis[0].svgWidgets.rotatableCrosshairsWidget.resetCrosshairs(apis, 0);
+
+      // Check if we have full WebGL 2 support
+      const openGLRenderWindow = apis[0].genericRenderWindow.getOpenGLRenderWindow();
+
+      if (!openGLRenderWindow.getWebgl2()) {
+        // Throw a warning if we don't have WebGL 2 support,
+        // And the volume is too big to fit in a 2D texture
+
+        const openGLContext = openGLRenderWindow.getContext();
+        const maxTextureSizeInBytes = openGLContext.getParameter(
+          openGLContext.MAX_TEXTURE_SIZE
+        );
+
+        const maxBufferLengthFloat32 =
+          (maxTextureSizeInBytes * maxTextureSizeInBytes) / 4;
+
+        const dimensions = firstApi.volumes[0]
+          .getMapper()
+          .getInputData()
+          .getDimensions();
+
+        const volumeLength = dimensions[0] * dimensions[1] * dimensions[2];
+
+        if (volumeLength > maxBufferLengthFloat32) {
+          const message =
+            'This volume is too large to fit in WebGL 1 textures and will display incorrectly. Please use a different browser to view this data';
+          LoggerService.error({ message });
+          UINotificationService.show({
+            title: 'Browser does not support WebGL 2',
+            message,
+            type: 'error',
+            autoClose: false,
+          });
+        }
+      }
     },
-  },
-  decreaseSlabThickness: {
-    commandFn: actions.changeSlabThickness,
-    storeContexts: [],
-    options: {
-      change: -3,
+  };
+
+  window.vtkActions = actions;
+
+  const definitions = {
+    requestNewSegmentation: {
+      commandFn: actions.requestNewSegmentation,
+      storeContexts: ['viewports'],
+      options: {},
     },
-  },
-  mpr2d: {
-    commandFn: actions.mpr2d,
-    storeContexts: ['viewports'],
-    options: {},
-    context: 'VIEWER',
-  },
+    jumpToSlice: {
+      commandFn: actions.jumpToSlice,
+      storeContexts: ['viewports'],
+      options: {},
+    },
+    setSegmentationConfiguration: {
+      commandFn: actions.setSegmentationConfiguration,
+      storeContexts: ['viewports'],
+      options: {},
+    },
+    setSegmentConfiguration: {
+      commandFn: actions.setSegmentConfiguration,
+      storeContexts: ['viewports'],
+      options: {},
+    },
+    axial: {
+      commandFn: actions.axial,
+      storeContexts: ['viewports'],
+      options: {},
+    },
+    coronal: {
+      commandFn: actions.coronal,
+      storeContexts: ['viewports'],
+      options: {},
+    },
+    sagittal: {
+      commandFn: actions.sagittal,
+      storeContexts: ['viewports'],
+      options: {},
+    },
+    enableRotateTool: {
+      commandFn: actions.enableRotateTool,
+      options: {},
+    },
+    enableCrosshairsTool: {
+      commandFn: actions.enableCrosshairsTool,
+      options: {},
+    },
+    enableLevelTool: {
+      commandFn: actions.enableLevelTool,
+      options: {},
+    },
+    resetMPRView: {
+      commandFn: actions.resetMPRView,
+      options: {},
+    },
+    setBlendModeToComposite: {
+      commandFn: actions.setBlendModeToComposite,
+      options: { blendMode: BlendMode.COMPOSITE_BLEND },
+    },
+    setBlendModeToMaximumIntensity: {
+      commandFn: actions.setBlendModeToMaximumIntensity,
+      options: { blendMode: BlendMode.MAXIMUM_INTENSITY_BLEND },
+    },
+    setBlendModeToMinimumIntensity: {
+      commandFn: actions.setBlendMode,
+      options: { blendMode: BlendMode.MINIMUM_INTENSITY_BLEND },
+    },
+    setBlendModeToAverageIntensity: {
+      commandFn: actions.setBlendMode,
+      options: { blendMode: BlendMode.AVERAGE_INTENSITY_BLEND },
+    },
+    setSlabThickness: {
+      // TODO: How do we pass in a function argument?
+      commandFn: actions.setSlabThickness,
+      options: {},
+    },
+    increaseSlabThickness: {
+      commandFn: actions.changeSlabThickness,
+      options: {
+        change: 3,
+      },
+    },
+    decreaseSlabThickness: {
+      commandFn: actions.changeSlabThickness,
+      options: {
+        change: -3,
+      },
+    },
+    mpr2d: {
+      commandFn: actions.mpr2d,
+      storeContexts: ['viewports'],
+      options: {},
+      context: 'VIEWER',
+    },
+    getVtkApiForViewportIndex: {
+      commandFn: actions.getVtkApis,
+      context: 'VIEWER',
+    },
+  };
+
+  return {
+    definitions,
+    defaultContext: 'ACTIVE_VIEWPORT::VTK',
+  };
 };
 
-export default {
-  definitions,
-  defaultContext: 'ACTIVE_VIEWPORT::VTK',
-};
+export default commandsModule;

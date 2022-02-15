@@ -9,11 +9,21 @@ describe('Top level exports', () => {
       'addServers',
       'sortBy',
       'writeScript',
+      'b64toBlob',
       'StackManager',
       'studyMetadataManager',
-      // Updates WADO-RS metaDataManager
-      'updateMetaDataManager',
-      'DICOMTagDescriptions',
+      'loadAndCacheDerivedDisplaySets',
+      'DicomLoaderService',
+      'urlUtil',
+      'makeDeferred',
+      'makeCancelable',
+      'hotkeys',
+      'Queue',
+      'isDicomUid',
+      'resolveObjectPath',
+      'hierarchicalListUtils',
+      'progressTrackingUtils',
+      'xhrRetryRequestHook',
     ].sort();
 
     const exports = Object.keys(utils.default).sort();

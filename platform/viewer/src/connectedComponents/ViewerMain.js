@@ -1,10 +1,13 @@
 import './ViewerMain.css';
-
+import { servicesManager } from './../App.js';
 import { Component } from 'react';
-import ConnectedLayoutManager from './ConnectedLayoutManager.js';
-import ConnectedToolContextMenu from './ConnectedToolContextMenu.js';
+import { ConnectedViewportGrid } from './../components/ViewportGrid/index.js';
 import PropTypes from 'prop-types';
 import React from 'react';
+import memoize from 'lodash/memoize';
+import _values from 'lodash/values';
+
+var values = memoize(_values);
 
 class ViewerMain extends Component {
   static propTypes = {
@@ -22,8 +25,6 @@ class ViewerMain extends Component {
     this.state = {
       displaySets: [],
     };
-
-    this.cachedViewportData = {};
   }
 
   getDisplaySets(studies) {
@@ -40,9 +41,9 @@ class ViewerMain extends Component {
     return displaySets;
   }
 
-  findDisplaySet(studies, studyInstanceUid, displaySetInstanceUid) {
+  findDisplaySet(studies, StudyInstanceUID, displaySetInstanceUID) {
     const study = studies.find(study => {
-      return study.studyInstanceUid === studyInstanceUid;
+      return study.StudyInstanceUID === StudyInstanceUID;
     });
 
     if (!study) {
@@ -50,7 +51,7 @@ class ViewerMain extends Component {
     }
 
     return study.displaySets.find(displaySet => {
-      return displaySet.displaySetInstanceUid === displaySetInstanceUid;
+      return displaySet.displaySetInstanceUID === displaySetInstanceUID;
     });
   }
 
@@ -61,91 +62,151 @@ class ViewerMain extends Component {
     // Get all the display sets for the viewer studies
     if (this.props.studies) {
       const displaySets = this.getDisplaySets(this.props.studies);
-
-      this.setState({
-        displaySets,
-      });
+      this.setState({ displaySets }, this.fillEmptyViewportPanes);
     }
   }
 
   componentDidUpdate(prevProps) {
-    if (this.props.studies !== prevProps.studies) {
-      const displaySets = this.getDisplaySets(this.props.studies);
+    const prevViewportAmount = prevProps.layout.viewports.length;
+    const viewportAmount = this.props.layout.viewports.length;
+    const isVtk = this.props.layout.viewports.some(vp => !!vp.vtk);
 
-      this.setState({
-        displaySets,
-      });
+    if (
+      this.props.studies !== prevProps.studies ||
+      (viewportAmount !== prevViewportAmount && !isVtk)
+    ) {
+      const displaySets = this.getDisplaySets(this.props.studies);
+      this.setState({ displaySets }, this.fillEmptyViewportPanes);
     }
   }
 
-  getViewportData = () => {
-    const viewportData = [];
+  fillEmptyViewportPanes = () => {
+    // TODO: Here is the entry point for filling viewports on load.
+    const dirtyViewportPanes = [];
     const { layout, viewportSpecificData } = this.props;
+    const { displaySets } = this.state;
 
-    for (
-      let viewportIndex = 0;
-      viewportIndex < layout.viewports.length;
-      viewportIndex++
-    ) {
-      let displaySet = viewportSpecificData[viewportIndex];
+    if (!displaySets || !displaySets.length) {
+      return;
+    }
 
-      // Use the cached display set in viewport if the new one is empty
-      if (displaySet && !displaySet.displaySetInstanceUid) {
-        displaySet = this.cachedViewportData[viewportIndex];
+    for (let i = 0; i < layout.viewports.length; i++) {
+      const viewportPane = viewportSpecificData[i];
+      const isNonEmptyViewport =
+        viewportPane &&
+        viewportPane.StudyInstanceUID &&
+        viewportPane.displaySetInstanceUID;
+
+      if (isNonEmptyViewport) {
+        dirtyViewportPanes.push({
+          StudyInstanceUID: viewportPane.StudyInstanceUID,
+          displaySetInstanceUID: viewportPane.displaySetInstanceUID,
+        });
+
+        continue;
       }
 
-      if (
-        displaySet &&
-        displaySet.studyInstanceUid &&
-        displaySet.displaySetInstanceUid
-      ) {
-        // Get missing fields from original display set
-        const originalDisplaySet = this.findDisplaySet(
-          this.props.studies,
-          displaySet.studyInstanceUid,
-          displaySet.displaySetInstanceUid
-        );
-        viewportData.push(Object.assign({}, originalDisplaySet, displaySet));
-      } else {
-        // If the viewport is empty, get one available in study
-        const { displaySets } = this.state;
-        displaySet = displaySets.find(
+      const foundDisplaySet =
+        displaySets.find(
           ds =>
-            !viewportData.some(
-              v => v.displaySetInstanceUid === ds.displaySetInstanceUid
+            !dirtyViewportPanes.some(
+              v => v.displaySetInstanceUID === ds.displaySetInstanceUID
             )
+        ) || displaySets[displaySets.length - 1];
+
+      dirtyViewportPanes.push(foundDisplaySet);
+    }
+
+    dirtyViewportPanes.forEach((vp, i) => {
+      if (vp && vp.StudyInstanceUID) {
+        this.setViewportData({
+          viewportIndex: i,
+          StudyInstanceUID: vp.StudyInstanceUID,
+          displaySetInstanceUID: vp.displaySetInstanceUID,
+        });
+      }
+    });
+  };
+
+  setViewportData = ({
+    viewportIndex,
+    StudyInstanceUID,
+    displaySetInstanceUID,
+  }) => {
+    let displaySet = this.findDisplaySet(
+      this.props.studies,
+      StudyInstanceUID,
+      displaySetInstanceUID
+    );
+
+    const { LoggerService, UINotificationService } = servicesManager.services;
+
+    if (displaySet.isDerived) {
+      const { Modality } = displaySet;
+      if (Modality === 'SEG' && servicesManager) {
+        const onDisplaySetLoadFailureHandler = error => {
+          LoggerService.error({ error, message: error.message });
+          UINotificationService.show({
+            title: 'DICOM Segmentation Loader',
+            message: error.message,
+            type: 'error',
+            autoClose: true,
+          });
+        };
+
+        const { referencedDisplaySet } = displaySet.getSourceDisplaySet(
+          this.props.studies,
+          true,
+          onDisplaySetLoadFailureHandler
         );
-        viewportData.push(Object.assign({}, displaySet));
+        displaySet = referencedDisplaySet;
+      } else {
+        displaySet = displaySet.getSourceDisplaySet(this.props.studies);
+      }
+
+      if (!displaySet) {
+        const error = new Error('Source data not present');
+        const message = 'Source data not present';
+        LoggerService.error({ error, message });
+        UINotificationService.show({
+          autoClose: false,
+          title: 'Fail to load series',
+          message,
+          type: 'error',
+        });
       }
     }
 
-    this.cachedViewportData = viewportData;
-
-    return viewportData;
-  };
-
-  setViewportData = ({ viewportIndex, item }) => {
-    const displaySet = this.findDisplaySet(
-      this.props.studies,
-      item.studyInstanceUid,
-      item.displaySetInstanceUid
-    );
+    if (displaySet.isModalitySupported === false) {
+      const error = new Error('Modality not supported');
+      const message = 'Modality not supported';
+      LoggerService.error({ error, message });
+      UINotificationService.show({
+        autoClose: false,
+        title: 'Fail to load series',
+        message,
+        type: 'error',
+      });
+    }
 
     this.props.setViewportSpecificData(viewportIndex, displaySet);
   };
 
   render() {
+    const { viewportSpecificData } = this.props;
+    const viewportData = values(viewportSpecificData);
+
     return (
       <div className="ViewerMain">
         {this.state.displaySets.length && (
-          <ConnectedLayoutManager
+          <ConnectedViewportGrid
+            isStudyLoaded={this.props.isStudyLoaded}
             studies={this.props.studies}
-            viewportData={this.getViewportData()}
+            viewportData={viewportData}
             setViewportData={this.setViewportData}
           >
             {/* Children to add to each viewport that support children */}
-            <ConnectedToolContextMenu />
-          </ConnectedLayoutManager>
+          </ConnectedViewportGrid>
         )}
       </div>
     );

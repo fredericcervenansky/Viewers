@@ -1,14 +1,7 @@
+/* Viewer Route */
 .entry-header {
-  padding: 10px 10px 0;
+  padding: 10px 15px;
   height: var(--top-bar-height);
-}
-
-.entry-header.header-big {
-  background: rgba(21,25,30,0.7);
-  padding: 10px var(--study-list-padding);
-  height: auto;
-  display: inline-block;
-  width: 100%;
 }
 
 .header-left-box {
@@ -16,22 +9,47 @@
   position: relative;
 }
 
-.header-viewerLink {
-  float: left;
-}
-
 .header-brand {
-  height: 30px;
   text-decoration: none;
+  height: 30px;
   float: left;
   clear: both;
 }
 
-.entry-header.header-big .header-brand {
+/* Home Page */
+.entry-header.header-big {
+  background: rgba(21, 25, 30, 0.7);
+  padding: 35px var(--study-list-padding);
   height: auto;
-  padding: 25px 0;
+  display: inline-block;
+  width: 100%;
 }
 
+.entry-header.header-big .header-brand {
+  height: 50px;
+  padding: 0;
+}
+
+.entry-header.header-big .header-logo-image {
+  margin-right: 20px;
+  width: 50px;
+  height: 50px;
+}
+
+.entry-header.header-big .header-logo-text {
+  width: 474px;
+  height: auto;
+}
+
+/** OTHER STYLES **/
+
+.dd-item {
+  width: 100%;
+}
+
+.header-viewerLink {
+  float: left;
+}
 
 .header-logo-image {
   fill: transparent;
@@ -39,26 +57,6 @@
   margin: 0 8px 0 0;
   width: 30px;
   float: left;
-}
-
-.entry-header.header-big .header-logo-image {
-  margin: 0 20px 0 0;
-  width: 50px;
-  height: 50px;
-}
-
-.header-logo-text {
-  display: inline-block;
-  font-family: var(--logo-font-family);
-  font-size: 14px;
-  font-weight: var(--logo-font-weight);
-  color: var(--text-primary-color);
-  line-height: 30px;
-}
-
-.entry-header.header-big .header-logo-text {
-  font-size: 30px;
-  line-height: 36px;
 }
 
 .header-btn {
@@ -105,4 +103,40 @@
   font-weight: 700;
   color: #91b9cd;
   margin-right: 1rem;
+}
+
+.notification-bar {
+  display: none;
+  position: absolute;
+  height: 20px;
+  line-height: 20px;
+  width: 100%;
+  background-color: #91b9cd;
+  color: #ffffff;
+  font-weight: bold;
+  text-align: center;
+}
+
+@media only screen and (max-width: 768px) {
+  .entry-header,
+  .entry-header.header-big {
+    padding: 30px 15px 10px 15px;
+  }
+  .entry-header.header-big .header-logo-image {
+    margin: 0 10px 0 0;
+    width: 25px;
+    height: 25px;
+  }
+
+  .entry-header.header-big .header-logo-text {
+    width: 40%;
+  }
+
+  /* Toggle Notification Bar */
+  .notification-bar {
+    display: block;
+  }
+  .header-menu .research-use {
+    display: none;
+  }
 }

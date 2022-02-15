@@ -1,3 +1,6 @@
+import SlabThicknessToolbarComponent from './toolbarComponents/SlabThicknessToolbarComponent';
+import VTKMPRToolbarButton from './toolbarComponents/VTKMPRToolbarButton';
+
 const TOOLBAR_BUTTON_TYPES = {
   COMMAND: 'command',
   SET_TOOL_ACTIVE: 'setToolActive',
@@ -23,6 +26,16 @@ const definitions = [
     commandOptions: {},
   },
   {
+    id: 'Reset',
+    label: 'Reset',
+    icon: 'reset',
+    //
+    type: TOOLBAR_BUTTON_TYPES.COMMAND,
+    commandName: 'resetMPRView',
+    commandOptions: {},
+  },
+  /*
+  {
     id: 'Rotate',
     label: 'Rotate',
     icon: '3d-rotate',
@@ -31,6 +44,8 @@ const definitions = [
     commandName: 'enableRotateTool',
     commandOptions: {},
   },
+  */
+  /*
   {
     id: 'setBlendModeToComposite',
     label: 'Disable MIP',
@@ -67,6 +82,60 @@ const definitions = [
     type: TOOLBAR_BUTTON_TYPES.COMMAND,
     commandName: 'decreaseSlabThickness',
     commandOptions: {},
+  },
+  */
+  {
+    id: 'changeSlabThickness',
+    label: 'Slab Thickness',
+    icon: 'soft-tissue',
+    CustomComponent: SlabThicknessToolbarComponent,
+    commandName: 'setSlabThickness',
+    actionButton: {
+      id: 'setSlabThickness',
+      label: 'slider',
+      type: TOOLBAR_BUTTON_TYPES.COMMAND,
+      commandName: 'setSlabThickness',
+      commandOptions: {},
+    },
+    deactivateButton: {
+      id: 'setBlendModeToComposite',
+      type: TOOLBAR_BUTTON_TYPES.SET_TOOL_ACTIVE,
+      commandName: 'setBlendModeToComposite',
+      commandOptions: {},
+    },
+    operationButtons: [
+      {
+        id: 'setBlendModeToMaximumIntensity',
+        label: 'MIP',
+        type: TOOLBAR_BUTTON_TYPES.SET_TOOL_ACTIVE,
+        commandName: 'setBlendModeToMaximumIntensity',
+        commandOptions: {},
+      },
+      {
+        id: 'setBlendModeToMinimumIntensity',
+        label: 'MinIP',
+        type: TOOLBAR_BUTTON_TYPES.SET_TOOL_ACTIVE,
+        commandName: 'setBlendModeToMinimumIntensity',
+        commandOptions: {},
+      },
+      {
+        id: 'setBlendModeToAverageIntensity',
+        label: 'AvgIP',
+        type: TOOLBAR_BUTTON_TYPES.SET_TOOL_ACTIVE,
+        commandName: 'setBlendModeToAverageIntensity',
+        commandOptions: {},
+      },
+    ],
+  },
+  {
+    id: '2DMPR',
+    label: '2D MPR',
+    icon: 'cube',
+    //
+    CustomComponent: VTKMPRToolbarButton,
+    type: TOOLBAR_BUTTON_TYPES.COMMAND,
+    commandName: 'mpr2d',
+    context: 'ACTIVE_VIEWPORT::CORNERSTONE',
   },
 ];
 

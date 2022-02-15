@@ -1,48 +1,35 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 import { withRouter } from 'react-router-dom';
-import queryString from 'query-string';
 import ConnectedViewerRetrieveStudyData from '../connectedComponents/ConnectedViewerRetrieveStudyData.js';
-
-function decodeStudyUids(studyUids) {
-  const decodedData = window.atob(studyUids);
-
-  return decodedData.split(';');
-}
-
-function getQueryParameters(location) {
-  if (location) {
-    return queryString.parse(location.search);
-  }
-
-  return {};
-}
+import OHIF from '@ohif/core';
+const { urlUtil: UrlUtil } = OHIF.utils;
 
 function IHEInvokeImageDisplay({ location }) {
   const {
     // patientID,
     requestType,
     studyUID,
-  } = getQueryParameters(location);
+  } = UrlUtil.parse(location.search);
 
   switch (requestType) {
     case 'STUDY':
       return (
         <ConnectedViewerRetrieveStudyData
-          studyInstanceUids={studyUID.split(';')}
+          studyInstanceUIDs={studyUID.split(';')}
         />
       );
 
     case 'STUDYBASE64':
       return (
         <ConnectedViewerRetrieveStudyData
-          studyInstanceUids={decodeStudyUids(studyUID)}
+          studyInstanceUIDs={UrlUtil.paramString.parseParam(studyUID)}
         />
       );
 
     case 'PATIENT':
       // TODO: connect this to the StudyList when we have the filter parameters set up
-      // return <StudyList patientUids={patientID.split(';')} />;
+      // return <StudyList patientUIDs={patientID.split(';')} />;
       return '';
 
     default:

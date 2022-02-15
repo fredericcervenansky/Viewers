@@ -10,15 +10,28 @@ import {
   SET_VIEWPORT_ACTIVE,
   SET_VIEWPORT_LAYOUT,
   SET_VIEWPORT_LAYOUT_AND_DATA,
+  SET_USER_PREFERENCES,
 } from './constants/ActionTypes.js';
+
+/**
+ * The definition of a viewport layout.
+ *
+ * @typedef {Object} ViewportLayout
+ * @property {number} numRows -
+ * @property {number} numColumns -
+ * @property {array} viewports -
+ */
 
 /**
  * VIEWPORT
  */
-export const setViewportSpecificData = (viewportIndex, data) => ({
+export const setViewportSpecificData = (
+  viewportIndex,
+  viewportSpecificData
+) => ({
   type: SET_VIEWPORT,
   viewportIndex,
-  data,
+  viewportSpecificData,
 });
 
 export const setViewportActive = viewportIndex => ({
@@ -26,9 +39,30 @@ export const setViewportActive = viewportIndex => ({
   viewportIndex,
 });
 
-export const setLayout = layout => ({
+/**
+ * @param {ViewportLayout} layout
+ */
+export const setLayout = ({ numRows, numColumns, viewports }) => ({
   type: SET_VIEWPORT_LAYOUT,
-  layout,
+  numRows,
+  numColumns,
+  viewports,
+});
+
+/**
+ * @param {number} layout.numRows
+ * @param {number} layout.numColumns
+ * @param {array} viewports
+ */
+export const setViewportLayoutAndData = (
+  { numRows, numColumns, viewports },
+  viewportSpecificData
+) => ({
+  type: SET_VIEWPORT_LAYOUT_AND_DATA,
+  numRows,
+  numColumns,
+  viewports,
+  viewportSpecificData,
 });
 
 export const clearViewportSpecificData = viewportIndex => ({
@@ -36,27 +70,16 @@ export const clearViewportSpecificData = viewportIndex => ({
   viewportIndex,
 });
 
-export const setActiveViewportSpecificData = data => ({
+export const setActiveViewportSpecificData = viewportSpecificData => ({
   type: SET_ACTIVE_SPECIFIC_DATA,
-  data,
+  viewportSpecificData,
 });
 
 /**
  * NOT-VIEWPORT
  */
-export const setStudyLoadingProgress = (progressId, progressData) => ({
-  type: 'SET_STUDY_LOADING_PROGRESS',
-  progressId,
-  progressData,
-});
-
-export const clearStudyLoadingProgress = progressId => ({
-  type: 'CLEAR_STUDY_LOADING_PROGRESS',
-  progressId,
-});
-
 export const setUserPreferences = state => ({
-  type: 'SET_USER_PREFERENCES',
+  type: SET_USER_PREFERENCES,
   state,
 });
 
@@ -76,9 +99,9 @@ export const setMeasurements = state => ({
   state,
 });
 
-export const setStudyData = (studyInstanceUid, data) => ({
+export const setStudyData = (StudyInstanceUID, data) => ({
   type: 'SET_STUDY_DATA',
-  studyInstanceUid,
+  StudyInstanceUID,
   data,
 });
 
@@ -87,22 +110,19 @@ export const setServers = servers => ({
   servers,
 });
 
-export const setViewportLayoutAndData = (layout, viewportSpecificData) => ({
-  type: SET_VIEWPORT_LAYOUT_AND_DATA,
-  layout,
-  viewportSpecificData,
-});
-
 const actions = {
-  // VIEWPORT
+  /**
+   * VIEWPORT
+   */
   setViewportActive,
   setViewportSpecificData,
   setViewportLayoutAndData,
   setLayout,
   clearViewportSpecificData,
   setActiveViewportSpecificData,
-  setStudyLoadingProgress,
-  clearStudyLoadingProgress,
+  /**
+   * NOT-VIEWPORT
+   */
   setUserPreferences,
   setExtensionData,
   setTimepoints,

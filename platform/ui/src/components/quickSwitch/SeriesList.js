@@ -1,14 +1,14 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 
-import { ThumbnailEntry } from './../studyBrowser';
+import { Thumbnail } from './../studyBrowser';
 import './SeriesList.styl';
 
 export class SeriesList extends Component {
   static propTypes = {
     seriesItems: PropTypes.array.isRequired,
     onClick: PropTypes.func.isRequired,
-    activeDisplaySetInstanceUid: PropTypes.string,
+    activeDisplaySetInstanceUID: PropTypes.string,
   };
 
   render() {
@@ -24,13 +24,13 @@ export class SeriesList extends Component {
   getSeriesItems = () => {
     return this.props.seriesItems.map((seriesData, index) => {
       return (
-        <ThumbnailEntry
-          key={seriesData.displaySetInstanceUid}
+        <Thumbnail
+          key={seriesData.displaySetInstanceUID}
           id={`series_thumb_${index}`}
           {...seriesData}
           active={
-            seriesData.displaySetInstanceUid ===
-            this.props.activeDisplaySetInstanceUid
+            seriesData.displaySetInstanceUID ===
+            this.props.activeDisplaySetInstanceUID
           }
           onClick={() => this.props.onClick(seriesData)}
         />
